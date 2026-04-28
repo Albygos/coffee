@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>☕ Coffee Ripeness Detector (Live)</title>
+
+<style>
+body {
+    font-family: Arial;
+    text-align: center;
+    background: #111;
+    color: white;
+}
+
+video, canvas {
+    width: 90%;
+    max-width: 400px;
+    border-radius: 12px;
+    margin-top: 10px;
+}
+
+#result {
+    font-size: 20px;
+    margin-top: 15px;
+    font-weight: bold;
+}
+</style>
+</head>
+
+<body>
+
+<h2>☕ Real-Time Coffee Ripeness Detector</h2>
+
+<video id="video" autoplay playsinline></video>
+<canvas id="canvas" style="display:none;"></canvas>
+
+<div id="result">Starting camera...</div>
+
+<script>
+// ==============================
+// 1. ACCESS CAMERA
+// ==============================
+const video = document.getElementById("video");
+
+navigator.mediaDevices.getUserMedia({
+    video: { facingMode: "environment" }
+})
+.then(stream => {
+    video.srcObject = stream;
+})
+.catch(err => {
+    document.getElementById("result").innerText = "❌ Camera access denied";
+});
+
+// ==============================
+// 2. PROCESS FRAMES
+// ==============================
+const canvas = document.getElementById("canvas");
+const ctx = canvas.getContext("2d");
+
+function detectRipeness() {
+    canvas.width = video.videoWidth;
+    canvas.height = video.videoHeight;
+
+    ctx.drawImage(video, 0, 0);
+
+    let frame = ctx.getImageData(0, 0, canvas.width, canvas.height);
+    let data = frame.data;
+
+    let redPixels = 0;
+    let greenPixels = 0;
+
+    for (let i = 0; i < data.length; i += 4) {
+        let r = data[i];
+        let g = data[i + 1];
+        let b = data[i + 2];
+
+        // Detect RED
+        if (r > 150 && g < 100 && b < 100) {
+            redPixels++;
+        }
+
+        // Detect GREEN
+        if (g > 120 && r < 120 && b < 120) {
+            greenPixels++;
+        }
+    }
+
+    let total = redPixels + greenPixels + 1;
+
+    let redRatio = redPixels / total;
+    let greenRatio = greenPixels / total;
+
+    let resultText = "";
+
+    if (redRatio > 0.4) {
+        resultText = `🔴 RIPE (RED) | Confidence: ${redRatio.toFixed(2)}`;
+    } else if (greenRatio > 0.4) {
+        resultText = `🟢 UNRIPE (GREEN) | Confidence: ${greenRatio.toFixed(2)}`;
+    } else {
+        resultText = `🟡 MIXED | Red: ${redRatio.toFixed(2)} | Green: ${greenRatio.toFixed(2)}`;
+    }
+
+    document.getElementById("result").innerText = resultText;
+}
+
+// ==============================
+// 3. RUN LOOP (REALTIME)
+// ==============================
+setInterval(detectRipeness, 200);
+</script>
+
+</body>
+</html>
