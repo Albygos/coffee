@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>☕ Coffee Ripeness Detector (Live)</title>
+<title>☕ Coffee Ripeness Detector</title>
 
 <style>
 body {
@@ -12,11 +12,26 @@ body {
     color: white;
 }
 
-video, canvas {
+/* Container to overlay canvas on video */
+.camera-box {
+    position: relative;
+    display: inline-block;
+}
+
+video {
     width: 90%;
     max-width: 400px;
     border-radius: 12px;
-    margin-top: 10px;
+}
+
+/* Canvas OVERLAY (not second camera) */
+canvas {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 90%;
+    max-width: 400px;
+    pointer-events: none;
 }
 
 #result {
@@ -29,43 +44,64 @@ video, canvas {
 
 <body>
 
-<h2>☕ Real-Time Coffee Ripeness Detector</h2>
+<h2>☕ Coffee Detector (Place inside box)</h2>
 
-<video id="video" autoplay playsinline></video>
-<canvas id="canvas" style="display:none;"></canvas>
+<div class="camera-box">
+    <video id="video" autoplay playsinline></video>
+    <canvas id="canvas"></canvas>
+</div>
 
 <div id="result">Starting camera...</div>
 
 <script>
 // ==============================
-// 1. ACCESS CAMERA
+// 1. CAMERA SETUP
 // ==============================
 const video = document.getElementById("video");
+const canvas = document.getElementById("canvas");
+const ctx = canvas.getContext("2d");
 
 navigator.mediaDevices.getUserMedia({
     video: { facingMode: "environment" }
 })
-.then(stream => {
-    video.srcObject = stream;
-})
-.catch(err => {
+.then(stream => video.srcObject = stream)
+.catch(() => {
     document.getElementById("result").innerText = "❌ Camera access denied";
 });
 
 // ==============================
-// 2. PROCESS FRAMES
+// 2. DETECTION FUNCTION
 // ==============================
-const canvas = document.getElementById("canvas");
-const ctx = canvas.getContext("2d");
-
 function detectRipeness() {
+
+    if (!video.videoWidth) return;
+
     canvas.width = video.videoWidth;
     canvas.height = video.videoHeight;
 
+    // Clear overlay
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+    // ROI BOX
+    let boxWidth = canvas.width * 0.4;
+    let boxHeight = canvas.height * 0.4;
+
+    let startX = (canvas.width - boxWidth) / 2;
+    let startY = (canvas.height - boxHeight) / 2;
+
+    // Draw box
+    ctx.strokeStyle = "yellow";
+    ctx.lineWidth = 4;
+    ctx.strokeRect(startX, startY, boxWidth, boxHeight);
+
+    // TEMP draw video to read pixels
     ctx.drawImage(video, 0, 0);
 
-    let frame = ctx.getImageData(0, 0, canvas.width, canvas.height);
+    let frame = ctx.getImageData(startX, startY, boxWidth, boxHeight);
     let data = frame.data;
+
+    // Remove drawn frame (keep only box)
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
 
     let redPixels = 0;
     let greenPixels = 0;
@@ -75,15 +111,11 @@ function detectRipeness() {
         let g = data[i + 1];
         let b = data[i + 2];
 
-        // Detect RED
-        if (r > 150 && g < 100 && b < 100) {
-            redPixels++;
-        }
+        // Ignore white
+        if (r > 200 && g > 200 && b > 200) continue;
 
-        // Detect GREEN
-        if (g > 120 && r < 120 && b < 120) {
-            greenPixels++;
-        }
+        if (r > 150 && g < 100 && b < 100) redPixels++;
+        if (g > 120 && r < 120 && b < 120) greenPixels++;
     }
 
     let total = redPixels + greenPixels + 1;
@@ -93,21 +125,32 @@ function detectRipeness() {
 
     let resultText = "";
 
-    if (redRatio > 0.4) {
-        resultText = `🔴 RIPE (RED) | Confidence: ${redRatio.toFixed(2)}`;
-    } else if (greenRatio > 0.4) {
-        resultText = `🟢 UNRIPE (GREEN) | Confidence: ${greenRatio.toFixed(2)}`;
-    } else {
-        resultText = `🟡 MIXED | Red: ${redRatio.toFixed(2)} | Green: ${greenRatio.toFixed(2)}`;
+    if (total < 500) {
+        resultText = "⚠️ Place coffee inside box";
+    }
+    else if (redRatio > 0.4) {
+        resultText = `🔴 RIPE (RED) | ${redRatio.toFixed(2)}`;
+    }
+    else if (greenRatio > 0.4) {
+        resultText = `🟢 UNRIPE (GREEN) | ${greenRatio.toFixed(2)}`;
+    }
+    else {
+        resultText = `🟡 MIXED`;
     }
 
     document.getElementById("result").innerText = resultText;
+
+    // Draw box again (final overlay)
+    ctx.strokeStyle = "yellow";
+    ctx.lineWidth = 4;
+    ctx.strokeRect(startX, startY, boxWidth, boxHeight);
 }
 
 // ==============================
-// 3. RUN LOOP (REALTIME)
+// 3. LOOP
 // ==============================
 setInterval(detectRipeness, 200);
+
 </script>
 
 </body>
